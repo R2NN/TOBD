@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Атомикхак 3.0: Анализатор логов</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        /* ========== VARIABLES ========== */
+        :root {
+            --neon-green: #FF994E;
+            --neon-green-glow: rgba(255, 153, 78, 0.5);
+            --bg-dark: #0A0A0A;
+            --bg-card: rgba(18, 18, 18, 0.85);
+            --text-primary: #FFFFFF;
+            --text-secondary: #B0B0B0;
+            --success: #FF994E;
+            --error: #FF4136;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-image: url('/static/background.webp');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            overflow-x: hidden;
+        }
+        
+        /* ========== ANIMATIONS ========== */
+        @keyframes twinkle {
+            0% { opacity: 0; }
+            50% { opacity: 0.7; }
+            100% { opacity: 0; }
+        }
+        
+        @keyframes moveAtom {
+            0% { top: 5%; left: 5%; transform: rotate(0deg); }
+            25% { top: 80%; left: 80%; transform: rotate(90deg); }
+            50% { top: 10%; left: 75%; transform: rotate(180deg); }
+            75% { top: 50%; left: 10%; transform: rotate(270deg); }
+            100% { top: 5%; left: 5%; transform: rotate(360deg); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* ========== BACKGROUND ========== */
+        .stars-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .stars, .stars-medium, .stars-fast {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(circle, white 1px, transparent 1px);
+        }
+        
+        .stars {
+            background-size: 150px 150px;
+            animation: twinkle 7s infinite;
+        }
+        
+        .stars-medium {
+            background-size: 100px 100px;
+            animation: twinkle 5s infinite;
+            animation-delay: -2s;
+        }
+        
+        .stars-fast {
+            background-size: 50px 50px;
+            animation: twinkle 3s infinite;
+            animation-delay: -1s;
+        }
+        
+        .moving-atom {
+            position: fixed;
+            height: auto;
+            z-index: 1;
+            pointer-events: none;
+            animation-name: moveAtom;
+            animation-timing-function: linear;
+            animation-iteration-count: infinite;
+        }
+        
+        .atom-1 { width: 150px; animation-duration: 25s; }
+        .atom-2 { width: 100px; animation-duration: 20s; animation-delay: -7s; }
+        .atom-3 { width: 70px; opacity: 0.9; animation-duration: 30s; animation-delay: -15s; }
+        
+        /* ========== HEADER ========== */
+        .header {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background: var(--bg-card);
+            border-bottom: 2px solid var(--neon-green);
+            backdrop-filter: blur(10px);
+        }
+        
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5em;
+            font-weight: 900;
+            color: var(--neon-green);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 20px var(--neon-green-glow);
+        }
+        
+        .nav-link {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 600;
+            padding: 10px 20px;
+            border: 2px solid var(--neon-green);
+            border-radius: 8px;
+            background: transparent;
+            color: var(--neon-green);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9em;
+        }
+        
+        .nav-link:hover {
+            background: var(--neon-green);
+            color: var(--bg-dark);
+            box-shadow: 0 0 20px var(--neon-green-glow);
+            transform: translateY(-2px);
+        }
+        
+        /* ========== MAIN CONTAINER ========== */
+        .main-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .content-card {
+            width: 100%;
+            max-width: 700px;
+            background: var(--bg-card);
+            border: 2px solid var(--neon-green);
+            border-radius: 16px;
+            padding: 50px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 40px rgba(255, 153, 78, 0.2);
+        }
+        
+        /* ========== TITLE ========== */
+        .title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.2em;
+            font-weight: 900;
+            color: var(--neon-green);
+            text-align: center;
+            margin-bottom: 15px;
+            text-shadow: 0 0 20px var(--neon-green-glow);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .subtitle {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.95em;
+            color: var(--text-secondary);
+            text-align: left;
+            margin-bottom: 40px;
+            line-height: 1.7;
+        }
+        
+        /* ========== WORKFLOW STEPS ========== */
+        .workflow-section {
+            margin-bottom: 30px;
+        }
+        
+        .section-label {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9em;
+            font-weight: 700;
+            color: var(--neon-green);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .section-label::before {
+            content: "▶";
+            color: var(--neon-green);
+        }
+        
+        /* ========== MODEL SELECTION ========== */
+        .model-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .radio-option {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            background: rgba(255, 153, 78, 0.05);
+            border: 2px solid rgba(255, 153, 78, 0.3);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .radio-option:hover {
+            background: rgba(255, 153, 78, 0.1);
+            border-color: var(--neon-green);
+        }
+        
+        .radio-option.selected {
+            background: rgba(255, 153, 78, 0.15);
+            border-color: var(--neon-green);
+            box-shadow: 0 0 20px rgba(255, 153, 78, 0.3);
+        }
+        
+        .radio-option input[type="radio"] {
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--neon-green);
+            border-radius: 50%;
+            margin-right: 15px;
+            position: relative;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        
+        .radio-option input[type="radio"]:checked::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 12px;
+            height: 12px;
+            background: var(--neon-green);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--neon-green-glow);
+        }
+        
+        .radio-label {
+            flex: 1;
+        }
+        
+        .radio-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1em;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+        
+        .radio-description {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+        }
+        
+        /* ========== DRAG AND DROP ZONE ========== */
+        .dropzone {
+            border: 3px dashed rgba(255, 153, 78, 0.4);
+            border-radius: 12px;
+            padding: 50px 30px;
+            text-align: center;
+            background: rgba(18, 18, 18, 0.85);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .dropzone:hover {
+            border-color: var(--neon-green);
+            background: rgba(40, 30, 20, 0.9);
+            box-shadow: 0 0 20px rgba(255, 153, 78, 0.2);
+        }
+        
+        .dropzone.dragover {
+            border-color: var(--neon-green);
+            background: rgba(60, 40, 20, 0.95);
+            box-shadow: 0 0 30px rgba(255, 153, 78, 0.4);
+        }
+        
+        .dropzone.file-selected {
+            border-style: solid;
+            border-color: var(--success);
+            background: rgba(40, 35, 20, 0.9);
+            box-shadow: 0 0 20px rgba(255, 153, 78, 0.3);
+        }
+        
+        .dropzone-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        
+        .dropzone-text {
+            font-size: 1.1em;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        
+        .dropzone-subtext {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+        }
+        
+        .file-info {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 1.1em;
+            color: var(--success);
+        }
+        
+        .file-info.active {
+            display: flex;
+        }
+        
+        .file-info .filename {
+            font-weight: 600;
+        }
+        
+        .remove-file {
+            background: transparent;
+            border: none;
+            color: var(--error);
+            font-size: 1.3em;
+            cursor: pointer;
+            padding: 0 8px;
+            transition: transform 0.2s;
+        }
+        
+        .remove-file:hover {
+            transform: scale(1.2);
+        }
+        
+        /* ========== PRIMARY CTA ========== */
+        .cta-button {
+            width: 100%;
+            padding: 18px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2em;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 30px;
+        }
+        
+        .cta-button.primary {
+            background: var(--neon-green);
+            color: var(--bg-dark);
+            box-shadow: 0 0 30px var(--neon-green-glow);
+        }
+        
+        .cta-button.primary:not(:disabled):hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 40px var(--neon-green-glow);
+        }
+        
+        .cta-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        /* ========== PROCESSING STATE ========== */
+        .processing-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+        }
+        
+        .processing-overlay.active {
+            display: flex;
+        }
+        
+        .processing-card {
+            background: var(--bg-card);
+            border: 2px solid var(--neon-green);
+            border-radius: 16px;
+            padding: 50px;
+            text-align: center;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 0 50px var(--neon-green-glow);
+        }
+        
+        .spinner {
+            width: 80px;
+            height: 80px;
+            border: 6px solid rgba(255, 153, 78, 0.2);
+            border-top: 6px solid var(--neon-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 25px;
+            box-shadow: 0 0 30px var(--neon-green-glow);
+        }
+        
+        .processing-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5em;
+            font-weight: 700;
+            color: var(--neon-green);
+            margin-bottom: 15px;
+            text-shadow: 0 0 15px var(--neon-green-glow);
+        }
+        
+        .processing-status {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1em;
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+        }
+        
+        .progress-bar-container {
+            width: 100%;
+            height: 30px;
+            background: rgba(18, 18, 18, 0.9);
+            border: 2px solid var(--neon-green);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 15px;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--neon-green), #FFB366);
+            border-radius: 13px;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 20px var(--neon-green-glow);
+            position: relative;
+        }
+        
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .progress-percentage {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2em;
+            font-weight: 900;
+            color: var(--neon-green);
+            text-shadow: 0 0 20px var(--neon-green-glow);
+            margin-bottom: 10px;
+        }
+        
+        .processing-stage {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1em;
+            font-weight: 700;
+            color: var(--neon-green);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* ========== ERROR MESSAGE ========== */
+        .error-box {
+            background: rgba(255, 65, 54, 0.15);
+            border: 2px solid var(--error);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            color: var(--text-primary);
+            font-weight: 600;
+            text-align: left;
+        }
+        
+        .error-box::before {
+            content: "⚠ ";
+            color: var(--error);
+            font-size: 1.2em;
+        }
+        
+        /* ========== RESPONSIVE ========== */
+        @media (max-width: 768px) {
+            .header {
+                padding: 15px 20px;
+            }
+            
+            .logo {
+                font-size: 1.2em;
+            }
+            
+            .content-card {
+                padding: 30px 25px;
+            }
+            
+            .title {
+                font-size: 1.6em;
+            }
+            
+            .subtitle {
+                font-size: 0.85em;
+            }
+            
+            .dropzone {
+                padding: 35px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Анимированный фон -->
+    <div class="stars-container">
+        <div class="stars"></div>
+        <div class="stars-medium"></div>
+        <div class="stars-fast"></div>
+    </div>
+    
+    <!-- Движущиеся атомы -->
+    <img src="/static/atomiss.png" alt="Atom 1" class="moving-atom atom-1">
+    <img src="/static/atomiss.png" alt="Atom 2" class="moving-atom atom-2">
+    <img src="/static/atomiss.png" alt="Atom 3" class="moving-atom atom-3">
+    
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">⚡ АТОМИКХАК 3.0</div>
+        <a href="/dashboard" class="nav-link">📊 Дашборд</a>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-container">
+        <div class="content-card">
+            <h1 class="title">Анализатор Логов</h1>
+            <p class="subtitle">
+                Интеллектуальная система анализа инцидентов с применением машинного обучения. 
+                Загрузите ZIP-архив с log-файлами (.txt) и базой знаний (anomalies_problems в форматах CSV/Excel), 
+                и получите детальный отчёт с рекомендациями по устранению проблем.
+            </p>
+            
+            <!-- Error Message -->
+            {% if error_message %}
+            <div class="error-box">
+                {{ error_message }}
+            </div>
+            {% endif %}
+            
+            <form id="upload-form" action="/process/" method="post" enctype="multipart/form-data">
+                <!-- STEP 1: Model Selection -->
+                <div class="workflow-section">
+                    <div class="section-label">Шаг 1: Выберите модель анализа</div>
+                    <div class="model-selector">
+                        <label class="radio-option selected" data-model="light">
+                            <input type="radio" name="model" value="light" checked>
+                            <div class="radio-label">
+                                <div class="radio-title">⚡ Быстрая модель</div>
+                                <div class="radio-description">Рекомендуемый баланс скорости и точности</div>
+                            </div>
+                        </label>
+                        <label class="radio-option" data-model="heavy">
+                            <input type="radio" name="model" value="heavy">
+                            <div class="radio-label">
+                                <div class="radio-title">🎯 Точная модель</div>
+                                <div class="radio-description">Максимальная точность анализа, медленнее</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- STEP 2: File Upload -->
+                <div class="workflow-section">
+                    <div class="section-label">Шаг 2: Загрузите архив с данными</div>
+                    <div class="dropzone" id="dropzone">
+                        <input type="file" name="file" id="file-input" accept=".zip" style="display: none;">
+                        <div class="dropzone-content" id="dropzone-content">
+                            <div class="dropzone-icon">📦</div>
+                            <div class="dropzone-text">Перетащите ZIP-архив сюда</div>
+                            <div class="dropzone-subtext">или нажмите для выбора файла</div>
+                        </div>
+                        <div class="file-info" id="file-info">
+                            <span>✅</span>
+                            <span>Файл: <span class="filename" id="filename"></span></span>
+                            <button type="button" class="remove-file" id="remove-file">×</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- STEP 3: Primary CTA -->
+                <button type="submit" class="cta-button primary" id="submit-btn" disabled>
+                    🚀 Запустить Анализ
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Processing Overlay -->
+    <div class="processing-overlay" id="processing-overlay">
+        <div class="processing-card">
+            <div class="spinner"></div>
+            <div class="processing-title">ОБРАБОТКА ДАННЫХ</div>
+            <div class="progress-percentage" id="progress-percentage">0%</div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="processing-stage" id="processing-stage">Инициализация...</div>
+            <div class="processing-status" id="processing-status">Подготовка к анализу...</div>
+        </div>
+    </div>
+    
+    <script>
+        // === ELEMENTS ===
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+        const dropzoneContent = document.getElementById('dropzone-content');
+        const fileInfo = document.getElementById('file-info');
+        const filename = document.getElementById('filename');
+        const removeFileBtn = document.getElementById('remove-file');
+        const submitBtn = document.getElementById('submit-btn');
+        const uploadForm = document.getElementById('upload-form');
+        const processingOverlay = document.getElementById('processing-overlay');
+        const processingStatus = document.getElementById('processing-status');
+        const radioOptions = document.querySelectorAll('.radio-option');
+        
+        let selectedFile = null;
+        
+        // === MODEL SELECTION ===
+        radioOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                radioOptions.forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                option.querySelector('input[type="radio"]').checked = true;
+            });
+        });
+        
+        // === DRAG AND DROP ===
+        dropzone.addEventListener('click', () => fileInput.click());
+        
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+        
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].name.endsWith('.zip')) {
+                handleFileSelect(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+        
+        removeFileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearFile();
+        });
+        
+        // === FILE HANDLING ===
+        function handleFileSelect(file) {
+            selectedFile = file;
+            filename.textContent = file.name;
+            dropzoneContent.style.display = 'none';
+            fileInfo.classList.add('active');
+            dropzone.classList.add('file-selected');
+            submitBtn.disabled = false;
+        }
+        
+        function clearFile() {
+            selectedFile = null;
+            fileInput.value = '';
+            dropzoneContent.style.display = 'block';
+            fileInfo.classList.remove('active');
+            dropzone.classList.remove('file-selected');
+            submitBtn.disabled = true;
+        }
+        
+        // === WEBSOCKET & FORM SUBMISSION ===
+        let ws = null;
+        
+        function updateProgress(progress, stage, message) {
+            // Обновляем процент
+            document.getElementById('progress-percentage').textContent = progress + '%';
+            document.getElementById('progress-bar').style.width = progress + '%';
+            
+            // Обновляем этап и сообщение
+            document.getElementById('processing-stage').textContent = stage;
+            document.getElementById('processing-status').textContent = message;
+        }
+        
+        function connectWebSocket(sessionId) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/progress/${sessionId}`;
+            
+            console.log('Подключение к WebSocket:', wsUrl);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket подключен');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('WebSocket сообщение:', data);
+                
+                if (data.type === 'progress') {
+                    updateProgress(data.progress, data.stage, data.message);
+                } else if (data.type === 'error') {
+                    console.error('Ошибка обработки:', data.message);
+                    alert('Ошибка: ' + data.message);
+                    processingOverlay.classList.remove('active');
+                    if (ws) {
+                        ws.close();
+                    }
+                } else if (data.type === 'complete') {
+                    console.log('Обработка завершена');
+                    updateProgress(100, 'Завершено', data.message);
+                    
+                    // Перенаправляем на дашборд через 1 секунду
+                    setTimeout(() => {
+                        window.location.href = '/dashboard?auto_load=true&from_analysis=true';
+                    }, 1000);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket ошибка:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket отключен');
+            };
+        }
+        
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!selectedFile) return;
+            
+            // Показываем overlay с начальным прогрессом
+            processingOverlay.classList.add('active');
+            updateProgress(0, 'Инициализация', 'Отправка файла на сервер...');
+            
+            try {
+                // Отправляем форму и получаем session_id
+                const formData = new FormData(uploadForm);
+                const response = await fetch('/process/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки файла');
+                }
+                
+                const result = await response.json();
+                const sessionId = result.session_id;
+                
+                console.log('Получен session_id:', sessionId);
+                
+                // Подключаемся к WebSocket для получения прогресса
+                connectWebSocket(sessionId);
+                
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка при отправке файла: ' + error.message);
+                processingOverlay.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

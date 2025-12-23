@@ -1,0 +1,26 @@
+version: 3
+agent:
+  authtoken: 33xJiXbggbf0VkJQYYS0Q1Rt7IF_4N9bEXBDXbBDvzMjvEPLy
+
+tunnels:
+  # Основное приложение - FastAPI сервис анализа логов
+  loganalyzer:
+    proto: http
+    addr: localhost:8001
+    inspect: true
+    domain: atomichack.main.com.ngrok.dev
+    
+  # Grafana - визуализация и дашборды
+  grafana:
+    proto: http
+    addr: localhost:3000
+    inspect: true
+    domain: atomichack.grafana.com.ngrok.dev
+    
+  # Prometheus - метрики и мониторинг
+  prometheus:
+    proto: http
+    addr: localhost:9090
+    inspect: true
+    domain: atomichack.prometheus.com.ngrok.dev
+

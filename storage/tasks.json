@@ -1,0 +1,41 @@
+{
+  "8f1ba6c3-b525-416a-ac5d-c0e05e501d68": {
+    "task_id": "8f1ba6c3-b525-416a-ac5d-c0e05e501d68",
+    "filename": "ValidationCase_13_Test1.zip",
+    "model": "light",
+    "status": "completed",
+    "progress": 100,
+    "created_at": "2025-10-23T15:14:51.696399",
+    "started_at": "2025-10-23T15:14:51.696912",
+    "completed_at": "2025-10-23T15:14:55.616728",
+    "estimated_completion": "2025-10-23T15:14:55.594764",
+    "error_message": null,
+    "last_message": "Анализ полностью завершен! Все отчеты готовы."
+  },
+  "b440f541-02a9-40b1-bafb-acec468c4c43": {
+    "task_id": "b440f541-02a9-40b1-bafb-acec468c4c43",
+    "filename": "ValidationCase_13_Test2.zip",
+    "model": "light",
+    "status": "completed",
+    "progress": 100,
+    "created_at": "2025-10-23T15:14:51.699485",
+    "started_at": "2025-10-23T15:14:51.700059",
+    "completed_at": "2025-10-23T15:14:55.626373",
+    "estimated_completion": "2025-10-23T15:14:55.596773",
+    "error_message": null,
+    "last_message": "Анализ полностью завершен! Все отчеты готовы."
+  },
+  "4c100a21-36c1-464e-9b79-5a76f151a8f6": {
+    "task_id": "4c100a21-36c1-464e-9b79-5a76f151a8f6",
+    "filename": "ValidationCase_13_Test3.zip",
+    "model": "light",
+    "status": "completed",
+    "progress": 100,
+    "created_at": "2025-10-23T15:14:51.702155",
+    "started_at": "2025-10-23T15:14:51.702670",
+    "completed_at": "2025-10-23T15:14:59.563684",
+    "estimated_completion": "2025-10-23T15:14:59.549562",
+    "error_message": null,
+    "last_message": "Анализ полностью завершен! Все отчеты готовы."
+  }
+}

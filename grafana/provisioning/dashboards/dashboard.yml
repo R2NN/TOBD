@@ -1,0 +1,19 @@
+# =============================================================================
+# Автоматическая загрузка дашбордов в Grafana
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: 'FastAPI Log Analyzer Dashboards'
+    orgId: 1
+    folder: 'FastAPI'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
+

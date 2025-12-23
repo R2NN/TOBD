@@ -1,0 +1,61 @@
+# ==============================================================================
+# Multi-stage Dockerfile для продакшн деплоя
+# Этот Dockerfile оптимизирован для минимального размера образа
+# ==============================================================================
+
+# Этап 1: Сборка зависимостей
+FROM python:3.11-slim as builder
+
+# Устанавливаем системные зависимости для сборки
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создаем виртуальное окружение
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Копируем и устанавливаем зависимости
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Этап 2: Финальный образ
+FROM python:3.11-slim
+
+# Устанавливаем только необходимые runtime зависимости
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Копируем виртуальное окружение из builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Настраиваем PATH
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Создаем рабочую директорию
+WORKDIR /app
+
+# Создаем непривилегированного пользователя
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+# Копируем приложение
+COPY --chown=appuser:appuser . .
+
+# Переключаемся на непривилегированного пользователя
+USER appuser
+
+# Открываем порт
+EXPOSE 8001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8001/docs')"
+
+# Запуск с gunicorn для продакшн
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "4"]
+

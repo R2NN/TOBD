@@ -1,0 +1,181 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # PostgreSQL - хранилище данных (требование ТЗ)
+  # =============================================================================
+  postgres:
+    image: postgres:15
+    container_name: postgres-analytics
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: analytics
+      POSTGRES_PASSWORD: analytics_password
+      POSTGRES_DB: log_analytics
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics -d log_analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # =============================================================================
+  # Dask Scheduler - управление распределёнными вычислениями (требование ТЗ)
+  # =============================================================================
+  dask-scheduler:
+    image: ghcr.io/dask/dask:latest
+    container_name: dask-scheduler
+    command: ["dask", "scheduler"]
+    ports:
+      - "8786:8786"  # Scheduler port
+      - "8787:8787"  # Dashboard
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # =============================================================================
+  # Dask Worker - воркер для параллельной обработки
+  # =============================================================================
+  dask-worker:
+    image: ghcr.io/dask/dask:latest
+    container_name: dask-worker
+    command: ["dask", "worker", "tcp://dask-scheduler:8786"]
+    depends_on:
+      - dask-scheduler
+    environment:
+      - DASK_DISTRIBUTED__WORKER__MEMORY__TARGET=0.8
+      - DASK_DISTRIBUTED__WORKER__MEMORY__SPILL=0.85
+      - DASK_DISTRIBUTED__WORKER__MEMORY__PAUSE=0.90
+    networks:
+      - monitoring
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # 2 воркера для параллелизма
+
+  # =============================================================================
+  # FastAPI Application
+  # =============================================================================
+  fastapi-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi-log-analyzer
+    ports:
+      - "8001:8001"
+    volumes:
+      # Монтируем код для разработки (раскомментируйте для hot-reload)
+      # - .:/app
+      # Монтируем только необходимые данные
+      - ./static:/app/static:ro
+      - ./templates:/app/templates:ro
+      # Монтируем storage для сохранения результатов анализа
+      - ./storage:/app/storage
+      # Монтируем папки ETL
+      - ./data:/app/data
+      - ./flows:/app/flows
+      - ./dask_jobs:/app/dask_jobs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENABLE_METRICS=1  # Включаем метрики Prometheus
+      # PostgreSQL
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=log_analytics
+      - POSTGRES_USER=analytics
+      - POSTGRES_PASSWORD=analytics_password
+      # Dask
+      - DASK_SCHEDULER_ADDRESS=tcp://dask-scheduler:8786
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dask-scheduler:
+        condition: service_started
+    # Для GPU поддержки раскомментируйте следующие строки:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # =============================================================================
+  # Prometheus - сбор и хранение метрик
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'  # Хранить данные 30 дней
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'  # Позволяет перезагружать конфиг через API
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - fastapi-app
+
+  # =============================================================================
+  # Grafana - визуализация метрик
+  # =============================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # Настройки для работы с ngrok и локально (динамическая конфигурация)
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+      - GF_SERVER_ENABLE_GZIP=true
+      # Дополнительные настройки безопасности
+      - GF_SECURITY_COOKIE_SAMESITE=lax
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_INSTALL_PLUGINS=  # Дополнительные плагины (если нужны)
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  monitoring:
+    driver: bridge
+
+# =============================================================================
+# Volumes для персистентного хранения данных
+# =============================================================================
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  postgres-data:
+    driver: local

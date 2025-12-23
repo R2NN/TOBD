@@ -1,0 +1,43 @@
+# =============================================================================
+# Prometheus Configuration для мониторинга FastAPI на ХОСТЕ
+# Используется когда FastAPI запущен локально через python main.py
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  
+  external_labels:
+    monitor: 'fastapi-log-analyzer'
+    environment: 'development'
+
+# =============================================================================
+# SCRAPE КОНФИГУРАЦИИ
+# =============================================================================
+
+scrape_configs:
+  # Мониторинг самого Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          instance: 'main'
+
+  # Мониторинг FastAPI приложения НА ХОСТЕ
+  - job_name: 'fastapi-log-analyzer'
+    scrape_interval: 10s
+    scrape_timeout: 8s
+    metrics_path: '/metrics'
+    
+    static_configs:
+      # host.docker.internal позволяет Docker контейнеру обращаться к хосту
+      - targets: ['host.docker.internal:8001']
+        labels:
+          service: 'fastapi'
+          application: 'log-analyzer'
+          instance: 'localhost'
+          model_type: 'both'
+
+

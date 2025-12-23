@@ -1,0 +1,65 @@
+# =============================================================================
+# Prometheus Configuration для мониторинга FastAPI Log Analyzer
+# =============================================================================
+
+global:
+  # Интервал сбора метрик (по умолчанию 15 секунд)
+  scrape_interval: 15s
+  
+  # Таймаут на один scrape
+  scrape_timeout: 10s
+  
+  # Интервал оценки правил
+  evaluation_interval: 15s
+  
+  # Добавляем внешние лейблы ко всем метрикам
+  external_labels:
+    monitor: 'fastapi-log-analyzer'
+    environment: 'production'
+
+# =============================================================================
+# SCRAPE КОНФИГУРАЦИИ
+# =============================================================================
+
+scrape_configs:
+  # Мониторинг самого Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          instance: 'main'
+
+  # Мониторинг FastAPI приложения
+  - job_name: 'fastapi-log-analyzer'
+    # Собираем метрики каждые 10 секунд для более быстрого отклика
+    scrape_interval: 10s
+    scrape_timeout: 8s
+    
+    # Путь к метрикам
+    metrics_path: '/metrics'
+    
+    # Настройки для Docker Compose сети
+    static_configs:
+      - targets: ['fastapi-app:8001']  # Имя сервиса из docker-compose.yml
+        labels:
+          service: 'fastapi'
+          application: 'log-analyzer'
+          instance: 'main'
+          model_type: 'both'  # Поддерживает light и heavy модели
+
+# =============================================================================
+# АЛЕРТЫ (ОПЦИОНАЛЬНО)
+# =============================================================================
+
+# Можно подключить правила алертинга
+# rule_files:
+#   - "alert.rules.yml"
+
+# Конфигурация Alertmanager (если используется)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+
